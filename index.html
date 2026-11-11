@@ -1,1 +1,210 @@
 
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>サッカー試合記録</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:#101827;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
+h1{font-size:25px;margin:8px 0}
+h2{font-size:19px;margin:22px 0 10px}
+.sub{color:#aab6c8;font-size:13px}
+.score{background:#1e293b;border-radius:16px;padding:18px;text-align:center;margin:16px 0}
+.score strong{font-size:48px;color:#65e6a5}
+.score div{color:#cbd5e1}
+input{width:100%;padding:12px;border-radius:9px;border:1px solid #475569;background:#1e293b;color:white;font-size:16px}
+.stat{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#1e293b;padding:11px;border-radius:11px;margin:8px 0}
+.statname{flex:1;font-size:15px}
+.count{font-size:22px;font-weight:bold;min-width:30px;text-align:center}
+button{border:0;border-radius:9px;padding:11px 15px;font-size:17px;font-weight:bold;background:#334155;color:white}
+button.plus{background:#087c53}
+button.minus{background:#9b3434}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.actions button{flex:1}
+.rate{color:#65e6a5;font-size:15px;margin:8px 0}
+.history{background:#1e293b;padding:12px;border-radius:10px;margin:8px 0;font-size:14px}
+.small{font-size:12px;color:#aab6c8}
+</style>
+</head>
+<body>
+<h1>⚽ サッカー試合記録</h1>
+<div class="sub">センターフォワード用・試合スタッツ</div>
+
+<h2>試合情報</h2>
+<input id="matchName" placeholder="試合名・対戦相手">
+
+<div class="score">
+  <div>現在のポイント</div>
+  <strong id="score">0</strong>
+  <div>ゴール・アシストは各5点、その他は加点・減点</div>
+</div>
+
+<h2>試合スタッツ</h2>
+<div id="stats"></div>
+
+<div class="rate" id="rates"></div>
+
+<div class="actions">
+<button onclick="saveMatch()">試合を保存</button>
+<button onclick="newMatch()">新しい試合</button>
+</div>
+
+<h2>保存した試合</h2>
+<div class="actions">
+<button onclick="exportCSV()">CSV出力</button>
+<button onclick="clearHistory()">履歴を全削除</button>
+</div>
+<div id="history"></div>
+
+<script>
+const definitions=[
+["得点","goal",5],
+["アシスト","assist",5],
+["ボールキープ","keep",2],
+["ボールロスト","loss",-1],
+["ドリブル成功","dribbleSuccess",2],
+["ドリブル失敗","dribbleFail",-1],
+["パス成功","passSuccess",2],
+["パス失敗","passFail",-1],
+["ボール奪取","steal",2],
+["シュート数","shot",2],
+["枠内シュート","onTarget",2],
+["パスカット","passCut",2],
+["ポストプレー成功","postPlay",2]
+];
+
+let counts={};
+let history=[];
+
+function emptyCounts(){
+ const obj={};
+ definitions.forEach(d=>obj[d[1]]=0);
+ return obj;
+}
+
+function load(){
+ try{
+  counts=JSON.parse(localStorage.getItem("soccerCurrent"))||emptyCounts();
+  history=JSON.parse(localStorage.getItem("soccerHistory"))||[];
+ }catch(e){
+  counts=emptyCounts();history=[];
+ }
+ definitions.forEach(d=>{
+  if(typeof counts[d[1]]!=="number")counts[d[1]]=0;
+ });
+ render();
+}
+
+function store(){
+ localStorage.setItem("soccerCurrent",JSON.stringify(counts));
+ localStorage.setItem("soccerHistory",JSON.stringify(history));
+}
+
+function change(key,amount){
+ counts[key]=Math.max(0,(counts[key]||0)+amount);
+ render();
+ store();
+}
+
+function points(){
+ return definitions.reduce((sum,d)=>sum+counts[d[1]]*d[2],0);
+}
+
+function render(){
+ document.getElementById("stats").innerHTML=definitions.map(d=>`
+ <div class="stat">
+  <div class="statname">${d[0]}</div>
+  <button class="minus" onclick="change('${d[1]}',-1)">−</button>
+  <div class="count">${counts[d[1]]}</div>
+  <button class="plus" onclick="change('${d[1]}',1)">＋</button>
+ </div>`).join("");
+
+ document.getElementById("score").textContent=points();
+
+ const pass=counts.passSuccess+counts.passFail;
+ const dribble=counts.dribbleSuccess+counts.dribbleFail;
+ document.getElementById("rates").innerHTML=
+ `パス成功率：${pass?Math.round(counts.passSuccess/pass*100):0}%　
+ ドリブル成功率：${dribble?Math.round(counts.dribbleSuccess/dribble*100):0}%`;
+
+ renderHistory();
+}
+
+function saveMatch(){
+ const name=document.getElementById("matchName").value.trim()||"試合";
+ history.unshift({
+  date:new Date().toLocaleString("ja-JP"),
+  name:name,
+  counts:{...counts},
+  score:points()
+ });
+ store();
+ alert("試合を保存しました");
+ renderHistory();
+}
+
+function newMatch(){
+ if(!confirm("現在の記録をリセットして新しい試合を始めますか？"))return;
+ counts=emptyCounts();
+ document.getElementById("matchName").value="";
+ store();
+ render();
+}
+
+function renderHistory(){
+ const el=document.getElementById("history");
+ if(!history.length){
+  el.innerHTML='<div class="small">保存した試合はありません</div>';
+  return;
+ }
+ el.innerHTML=history.map((h,i)=>`
+ <div class="history">
+  <b>${escapeHTML(h.name)}</b><br>
+  <span class="small">${escapeHTML(h.date)}</span><br>
+  ポイント：${h.score}<br>
+  得点：${h.counts.goal}　アシスト：${h.counts.assist}
+  <br><button onclick="loadMatch(${i})">この試合を表示</button>
+ </div>`).join("");
+}
+
+function escapeHTML(s){
+ return String(s).replace(/[&<>"']/g,c=>({
+ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+ })[c]);
+}
+
+function loadMatch(i){
+ if(!confirm("この試合の記録を現在の画面に読み込みますか？"))return;
+ counts={...history[i].counts};
+ document.getElementById("matchName").value=history[i].name;
+ store();render();
+}
+
+function clearHistory(){
+ if(!confirm("保存した試合履歴をすべて削除しますか？"))return;
+ history=[];store();renderHistory();
+}
+
+function exportCSV(){
+ if(!history.length){alert("保存した試合がありません");return;}
+ const header=["日付","試合名","ポイント",...definitions.map(d=>d[0])];
+ const rows=history.map(h=>[
+  h.date,h.name,h.score,...definitions.map(d=>h.counts[d[1]])
+ ]);
+ const csv=[header,...rows].map(row=>
+  row.map(v=>'"'+String(v??"").replace(/"/g,'""')+'"').join(",")
+ ).join("\r\n");
+ const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement("a");
+ a.href=url;a.download="soccer-stats.csv";a.click();
+ URL.revokeObjectURL(url);
+}
+
+load();
+</script>
+</body>
+</html>
