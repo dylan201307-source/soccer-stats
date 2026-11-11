@@ -1,0 +1,9 @@
+{
+  "name": "サッカー試合記録",
+  "short_name": "サッカー記録",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101827",
+  "theme_color": "#101827"
+}
